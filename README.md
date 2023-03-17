@@ -1,2 +1,2 @@
 # thuy_b2sd
-A tool to connect blender to stable diffusion
+A public tool to connect blender to stable diffusion
