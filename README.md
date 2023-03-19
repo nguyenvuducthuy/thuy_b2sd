@@ -5,4 +5,6 @@ A public tool to connect blender to stable diffusion
 - [x] txt2image
 - [x] animation seq
 - [x] remove background
-- [ ] img2img
+- [x] img2img
+- [ ] support script extention
+- [ ] multi control net

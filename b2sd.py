@@ -25,7 +25,7 @@ from rembg import remove
 TEMP_FOLDER = tempfile.gettempdir()
 
 _out_path     = TEMP_FOLDER
-_base_image   = "%s/thuy.png"%TEMP_FOLDER
+_base_image   = "%s/base/base.png"%TEMP_FOLDER
 
 # _prompt            = "1 girls, blue hair, long blue jean , white shirt, empty, black background, short hair"
 # _negative_prompt   = "worst quality, low quality:1.2, t-shirt, black shirt, short pant, hat, wide pant, jacket, skirt, long hair"
@@ -50,30 +50,38 @@ bl_info = {
     "category": "",
 }
 
-# ------------------------------------
-# Store properties in the active scene
-# ------------------------------------
-
 class b2sdSettings(PropertyGroup):
+    """
+    ------------------------------------
+    Store properties in the active scene
+    ------------------------------------
+    """
     isRenAnim : BoolProperty(
         name="is render animation",
         description="b2sd is render animation",
-        default = False)
-    sd_isrembg : BoolProperty(
-        name="sd_isrembg",
-        description="sd_isrembg",
-        default = False)
+        default = False
+        )
+    sd_isRembg : BoolProperty(
+        name="sd_isRembg",
+        description="sd_isRembg",
+        default = False
+        )
+    sd_isImg2img : BoolProperty(
+        name="sd_isImg2img",
+        description="sd_isImg2img",
+        default = False
+        )
     sd_prompt : StringProperty(
         name="sd_prompt",
         description="sd_prompt",
         default=_prompt,
-        maxlen=1024,
+        maxlen=1024
         )
     sd_negative_prompt : StringProperty(
         name="sd_negative_prompt",
         description="sd_negative_prompt",
         default=_negative_prompt,
-        maxlen=1024,
+        maxlen=1024
         )
     sd_seed : IntProperty(
         name = "sd_seed",
@@ -86,7 +94,13 @@ class b2sdSettings(PropertyGroup):
         name="sd_out_path",
         description="sd_out_path",
         default=_out_path,
-        maxlen=1024,
+        maxlen=1024
+        )
+    sd_base_image : StringProperty(
+        name="sd_base_image",
+        description="sd_base_image",
+        default=_base_image,
+        maxlen=1024
         )
 
 class Button(bpy.types.Operator):
@@ -109,7 +123,9 @@ class Button(bpy.types.Operator):
                     sd_negative_prompt  = b2sd.sd_negative_prompt,
                     sd_seed             = b2sd.sd_seed,
                     sd_root_out_path    = b2sd.sd_out_path,
-                    sd_isrembg          = b2sd.sd_isrembg
+                    sd_isRembg          = b2sd.sd_isRembg,
+                    sd_base_image       = b2sd.sd_base_image,
+                    sd_isImg2img        = b2sd.sd_isImg2img
                     )
 
         return {'FINISHED'}
@@ -132,7 +148,9 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
 
         # display the properties
         layout.prop(b2sd, "isRenAnim",          text="isRenAnim")
-        layout.prop(b2sd, "sd_isrembg",         text="sd_isrembg")
+        layout.prop(b2sd, "sd_isRembg",         text="sd_isRembg")
+        layout.prop(b2sd, "sd_isImg2img",       text="sd_isImg2img")
+        layout.prop(b2sd, "sd_base_image",      text="sd_base_image")
         layout.prop(b2sd, "sd_out_path",        text="sd_out_path")
         layout.prop(b2sd, "sd_prompt",          text="sd_prompt")
         layout.prop(b2sd, "sd_negative_prompt", text="sd_negative_prompt")
@@ -204,7 +222,7 @@ def run_sd(files, **kwargs):
     """
     main function to connect to api
     kargs:
-        base_img = str,
+        sd_base_image = str,
         sd_prompt = str
         sd_negative_prompt = str
         sd_seed=int
@@ -216,18 +234,25 @@ def run_sd(files, **kwargs):
     end   = len(files)
     # end   = 10
 
-    url = "http://localhost:7860/sdapi/v1/txt2img"
+    sd_cmd = "txt2img"
 
-    if "base_img" in kwargs:
-        kwargs["base_img"] = Image.open(kwargs["base_img"])
-        kwargs["base_img"] = kwargs["base_img"].resize((512,512))
+    _sd_base_img = ""
+    _sd_base_img_path = getDictVal(kwargs,"sd_base_image")
+    _sd_isImg2img     = getDictVal(kwargs,"sd_isImg2img")
+    if _sd_base_img_path and _sd_isImg2img:
+        _sd_base_img = Image.open(_sd_base_img_path)
+        _sd_base_img = _sd_base_img.resize((512,512))
+        _sd_base_img = raw_b64_img(_sd_base_img)
+        sd_cmd = "img2img"
+
+    url = f"http://localhost:7860/sdapi/v1/{sd_cmd}"
 
     for i in range(start, end):
         # print(files[i])
         cn_img   = raw_b64_img(Image.open(files[i]))
         # cn_mask_img   = b64_img(Image.open(files[i].replace("/in","/in_mask").replace(".png",".jpg")))
         body = {
-            # "init_images": [b64_img(base_img)],
+            "init_images": [_sd_base_img] if _sd_base_img else [],
             "prompt": getDictVal(kwargs,"sd_prompt"),
             "negative_prompt": getDictVal(kwargs,"sd_negative_prompt"),
             "seed": getDictVal(kwargs,"sd_seed") if "sd_seed" in kwargs else 888,
@@ -293,7 +318,7 @@ def run_sd(files, **kwargs):
         sd_out_img = "%s/%s"%(getDictVal(kwargs,"sd_out_path"),os.path.basename(files[i]))
         img.save(sd_out_img)
 
-        if getDictVal(kwargs,"sd_isrembg"):
+        if getDictVal(kwargs,"sd_isRembg"):
             rmbg(sd_out_img)
 
         print("sd_out_img: %s"%sd_out_img)
@@ -333,7 +358,7 @@ class BUtils:
 
     def doit(self, **kwargs):
         """
-        Function to connect blender wit SD
+        Main Function to connect blender with SD
         isanim : bool
             set it true when you want to render seq
         sd_prompt : str
@@ -344,8 +369,10 @@ class BUtils:
             sd seed
         sd_root_out_path : str
             output folder
-        sd_isrembg : bool
+        sd_isRembg : bool
             remove bg in sd output img
+        sd_base_image : str
+            base image for img2img cmd
         """
         root = getDictVal(kwargs,"sd_root_out_path")
         sd_cn_image_folder  = f"{root}/cn_images"
@@ -359,11 +386,13 @@ class BUtils:
                 sd_negative_prompt  = getDictVal(kwargs,"sd_negative_prompt"),
                 sd_seed             = getDictVal(kwargs,"sd_seed"),
                 sd_out_path         = sd_out_path,
-                sd_isrembg          = getDictVal(kwargs,"sd_isrembg")
+                sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
+                sd_base_image       = getDictVal(kwargs,"sd_base_image"),
+                sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img")
             )
 
             output_path = currentImgPath.replace(sd_cn_image_folder,sd_out_path)
-            if getDictVal(kwargs,"sd_isrembg"):
+            if getDictVal(kwargs,"sd_isRembg"):
                 output_path = "%s_rembg.png"%os.path.splitext(output_path)[0]
             self.displayImg(output_path)
 
@@ -379,16 +408,12 @@ class BUtils:
                     sd_negative_prompt  = getDictVal(kwargs,"sd_negative_prompt"),
                     sd_seed             = getDictVal(kwargs,"sd_seed"),
                     sd_out_path         = sd_out_path,
-                    sd_isrembg          = getDictVal(kwargs,"sd_isrembg")
+                    sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
+                    sd_base_image       = getDictVal(kwargs,"sd_base_image"),
+                    sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img")
                 )
 
                 cn_img.append(currentImgPath)
-
-# butils = BUtils()
-# butils.doit()
-
-# CN_img = getAllFilesInFolder(_cn_image_folder)
-# run_sd(CN_img)
 
 if __name__ == "__main__":
     register()
