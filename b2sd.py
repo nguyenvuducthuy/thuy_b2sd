@@ -1,7 +1,8 @@
 import bpy
 from bpy.types import ( Panel,
                         Operator,
-                        PropertyGroup
+                        PropertyGroup,
+                        UIList
                         )
 from bpy.props import (StringProperty,
                        BoolProperty,
@@ -9,7 +10,8 @@ from bpy.props import (StringProperty,
                        FloatProperty,
                        FloatVectorProperty,
                        EnumProperty,
-                       PointerProperty,
+                       CollectionProperty,
+                       PointerProperty
                        )
 from bpy.app.handlers import persistent
 import requests, os, time, math
@@ -26,14 +28,19 @@ TEMP_FOLDER = tempfile.gettempdir()
 
 _out_path     = TEMP_FOLDER
 _base_image   = "%s/base/base.png"%TEMP_FOLDER
+_webui_root   = ""
 
 # _prompt            = "1 girls, blue hair, long blue jean , white shirt, empty, black background, short hair"
 # _negative_prompt   = "worst quality, low quality:1.2, t-shirt, black shirt, short pant, hat, wide pant, jacket, skirt, long hair"
-# _seed              = 88888
+# _seed              = "88888"
 
-_prompt            = "a cute girl, white shirt, red shoes, blue hair, yellow eyes, blue long jean pant"
-_negative_prompt   = "(low quality, worst quality:1.4), nsfw"
-_seed              = 88888
+# _prompt            = "a cute girl, white shirt, red shoes, blue hair, yellow eyes, blue long jean pant"
+# _negative_prompt   = "(low quality, worst quality:1.4), nsfw"
+# _seed              = "88888"
+
+_prompt            = "a cute girl, shirt, shoes, hair, eyes, long jean pant,monochrome, lineart, doodles, sketch, <lora:animeLineartStyle_v20Offset:1>"
+_negative_prompt   = "(low quality, worst quality:1.4), nsfw, EasyNegative"
+_seed              = "88888"
 
 # ==
 # UI
@@ -83,12 +90,11 @@ class b2sdSettings(PropertyGroup):
         default=_negative_prompt,
         maxlen=1024
         )
-    sd_seed : IntProperty(
+    sd_seed : StringProperty(
         name = "sd_seed",
         description="sd_seed",
         default = _seed,
-        min = 10,
-        max = 8888888
+        maxlen=1024
         )
     sd_out_path : StringProperty(
         name="sd_out_path",
@@ -102,6 +108,12 @@ class b2sdSettings(PropertyGroup):
         default=_base_image,
         maxlen=1024
         )
+    sd_webui_root : StringProperty(
+        name="sd_webui_root",
+        description="sd_webui_root",
+        default="",
+        maxlen=1024
+        )
 
 class Button(bpy.types.Operator):
     """
@@ -113,8 +125,9 @@ class Button(bpy.types.Operator):
     def execute(self, context):
         context = bpy.context
         obj = context.object
-        sce = context.scene
-        b2sd= sce.b2sd
+        scn = context.scene
+        b2sd= scn.b2sd
+        cn  = scn.custom
 
         print("start b2sd")
         butils = BUtils()
@@ -125,10 +138,96 @@ class Button(bpy.types.Operator):
                     sd_root_out_path    = b2sd.sd_out_path,
                     sd_isRembg          = b2sd.sd_isRembg,
                     sd_base_image       = b2sd.sd_base_image,
-                    sd_isImg2img        = b2sd.sd_isImg2img
+                    sd_isImg2img        = b2sd.sd_isImg2img,
+                    sd_cn_list          = cn
                     )
 
         return {'FINISHED'}
+
+class CUSTOM_OT_actions(Operator):
+    """Move items up and down, add and remove"""
+    bl_idname = "custom.list_action"
+    bl_label = "List Actions"
+    bl_description = "Move items up and down, add and remove"
+    bl_options = {'REGISTER'}
+
+    action: bpy.props.EnumProperty(
+        items=(
+            ('UP', "Up", ""),
+            ('DOWN', "Down", ""),
+            ('REMOVE', "Remove", ""),
+            ('ADD', "Add", "")))
+
+    def random_color(self):
+        from mathutils import Color
+        from random import random
+        return Color((random(), random(), random()))
+
+    def invoke(self, context, event):
+        scn = context.scene
+        idx = scn.custom_index
+
+        try:
+            item = scn.custom[idx]
+        except IndexError:
+            pass
+        else:
+            if self.action == 'DOWN' and idx < len(scn.custom) - 1:
+                item_next = scn.custom[idx+1].name
+                scn.custom.move(idx, idx+1)
+                scn.custom_index += 1
+                info = 'Item "%s" moved to position %d' % (item.name, scn.custom_index + 1)
+                self.report({'INFO'}, info)
+
+            elif self.action == 'UP' and idx >= 1:
+                item_prev = scn.custom[idx-1].name
+                scn.custom.move(idx, idx-1)
+                scn.custom_index -= 1
+                info = 'Item "%s" moved to position %d' % (item.name, scn.custom_index + 1)
+                self.report({'INFO'}, info)
+
+            elif self.action == 'REMOVE':
+                item = scn.custom[scn.custom_index]
+                info = 'Item %s removed from scene' % (item)
+                scn.custom.remove(idx)
+                if scn.custom_index == 0:
+                    scn.custom_index = 0
+                else:
+                    scn.custom_index -= 1
+                self.report({'INFO'}, info)
+
+        if self.action == 'ADD':
+            item = scn.custom.add()
+            item.id = len(scn.custom)
+            item.name = item.model
+            col = self.random_color()
+            scn.custom_index = (len(scn.custom)-1)
+            info = '%s added to list' % (item.name)
+            self.report({'INFO'}, info)
+        return {"FINISHED"}
+
+def printItem(self, value):
+    context = value
+    scn = context.scene
+    print(scn.custom[scn.custom_index])
+
+class CUSTOM_UL_items(UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            split = layout.split(factor=0.3)
+            split.label(text="Control net: %d" % (index))
+            split.label(text="module: %s" % (item.module))
+            # static method UILayout.icon returns the integer value of the icon ID
+            # "computed" for the given RNA object.
+            # split.prop(item, "module", text="", emboss=False)
+            # split.prop(item, "model", text="", emboss=False)
+
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=layout.icon(mat))
+
+    def invoke(self, context, event):
+        pass
 
 class B2SD_PT_main_pannel(bpy.types.Panel):
     bl_label        = "b2sd"
@@ -141,27 +240,143 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
         layout = self.layout
 
         obj = context.object
-        sce = context.scene
-        b2sd= sce.b2sd
+        scn = context.scene
+        b2sd= scn.b2sd
 
         row = layout.row()
+
+        row.operator(Button.bl_idname,text=Button.bl_label, icon='MENU_PANEL')
 
         # display the properties
         layout.prop(b2sd, "isRenAnim",          text="isRenAnim")
         layout.prop(b2sd, "sd_isRembg",         text="sd_isRembg")
         layout.prop(b2sd, "sd_isImg2img",       text="sd_isImg2img")
+        # layout.prop(b2sd, "sd_webui_root",      text="sd_webui_root")
         layout.prop(b2sd, "sd_base_image",      text="sd_base_image")
         layout.prop(b2sd, "sd_out_path",        text="sd_out_path")
         layout.prop(b2sd, "sd_prompt",          text="sd_prompt")
         layout.prop(b2sd, "sd_negative_prompt", text="sd_negative_prompt")
         layout.prop(b2sd, "sd_seed",            text="sd_seed")
 
-        row.operator(Button.bl_idname,text=Button.bl_label, icon='MENU_PANEL')
+        rows    = 2
+        row     = layout.row()
+        row.template_list("CUSTOM_UL_items", "custom_def_list", scn, "custom", scn, "custom_index", rows=rows)
+
+        col     = row.column(align=True)
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='ADD', text="").action = 'ADD'
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+        col.separator()
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_UP', text="").action = 'UP'
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
+
+        idx     = scn.custom_index
+        try:
+            cn_item = scn.custom[idx]
+            layout.prop(cn_item, "module" ,              text="module")
+            layout.prop(cn_item, "model" ,               text="model")
+            layout.prop(cn_item, "resize_mode" ,         text="resize_mode")
+            layout.prop(cn_item, "weight" ,              text="weight")
+        except IndexError:
+            pass
+
+class CUSTOM_PG_ControlNetCollection(PropertyGroup):
+
+    # def getControlNetModel(self, context):
+    #     scn     = bpy.context.scene
+    #     r = scn.sd_webui_root
+    #     files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(r) for f in filenames if os.path.splitext(f)[1] == '.safetensors']
+    #     res = ()
+    #     for i in files:
+    #         n = os.path.splitext(os.path.basename(i))[0]
+    #         res+=((n, n, ""),)
+    #     return res
+
+    def getControlNetModel(self, context):
+        return (
+            ("control_canny-fp16 [e3fe7712]",    "control_canny-fp16 [e3fe7712]",     ""),
+            ("control_depth-fp16 [400750f6]",    "control_depth-fp16 [400750f6]",     ""),
+            ("control_hed-fp16 [13fee50b]",      "control_hed-fp16 [13fee50b]",       ""),
+            ("control_mlsd-fp16 [e3705cfa]",     "control_mlsd-fp16 [e3705cfa]" ,     ""),
+            ("control_openpose-fp16 [9ca67cc5]", "control_openpose-fp16 [9ca67cc5]" , ""),
+            ("control_scribble-fp16 [c508311e]", "control_scribble-fp16 [c508311e]" , ""),
+            ("control_seg-fp16 [b9c1cc12]",      "control_seg-fp16 [b9c1cc12]",       "")
+        )
+
+    def getControlNetModule(self, context):
+        return (
+            ("none",        "none",     ""),
+            ("canny",       "canny",    ""),
+            ("depth",       "depth",    ""),
+            ("hed",         "hed",      ""),
+            ("mlsd",        "mlsd" ,    ""),
+            ("openpose",    "openpose" ,""),
+            ("scribble",    "scribble" ,""),
+            ("seg",         "seg",      "")
+        )
+
+    # material: PointerProperty(
+    #     name="Material",
+    #     type=bpy.types.Material)
+
+    module : EnumProperty(
+        items=getControlNetModule,
+        name="module",
+        description="module",
+        )
+    
+    model : EnumProperty(
+        items=getControlNetModel,
+        name="model",
+        description="model",
+        )
+    
+    weight : FloatProperty(
+        name = "weight",
+        description="weight",
+        default = 1,
+        min = 0,
+        max = 1
+        )
+
+    resize_mode : EnumProperty(
+        items=(
+            ("Scale to Fit (Inner Fit)", "Scale to Fit (Inner Fit)", ""),
+            ("Just Resize", "Just Resize", ""),
+            ("Envelope (Outer Fit)", "Envelope (Outer Fit)", "")
+            ),
+        name="resize_mode",
+        description="resize_mode",
+        update=None,
+        get=None,
+        set=None
+        )
+    sd_cn_img : StringProperty(
+        name="sd_cn_img",
+        description="sd_cn_img",
+        default=_webui_root,
+        maxlen=1024
+        )
+    # "input_image": cn_img,
+    # "module": "none",
+    # "model": "control_openpose-fp16 [9ca67cc5]",
+    # "weight": 1,
+    # "resize_mode": "Scale to Fit (Inner Fit)",
+    # "lowvram": False,
+    # "processor_res": 512,
+    # "threshold_a": 64,
+    # "threshold_b": 64,
+    # "guidance": 1.0,
+    # "guidance_start": 0.0,
+    # "guidance_end": 1.0,
+    # "guessmode": False,
 
 _classes=[
 Button,
 B2SD_PT_main_pannel,
-b2sdSettings
+b2sdSettings,
+CUSTOM_OT_actions,
+CUSTOM_UL_items,
+CUSTOM_PG_ControlNetCollection
 ]
 
 def register():
@@ -170,6 +385,8 @@ def register():
         register_class(cls)
 
     bpy.types.Scene.b2sd = PointerProperty(type=b2sdSettings)
+    bpy.types.Scene.custom = CollectionProperty(type=CUSTOM_PG_ControlNetCollection)
+    bpy.types.Scene.custom_index = IntProperty()
 
 def unregister():
     from bpy.utils import unregister_class
@@ -177,6 +394,8 @@ def unregister():
         unregister_class(cls)
 
     del bpy.types.Scene.b2sd
+    del bpy.types.Scene.custom
+    del bpy.types.Scene.custom_index
 
 # ==============
 # Utils function
@@ -218,6 +437,28 @@ def rmbg(input_path):
     print("rembg img: %s"%output_path)
     return output_path
 
+def parseCN(cn_list):
+    res = []
+    for i in cn_list:
+        cn_cur = {
+            "input_image": raw_b64_img(Image.open(i.sd_cn_img)),
+            "module": i.module,
+            "model": i.model,
+            "weight": i.weight,
+            "resize_mode": i.resize_mode,
+            "lowvram": False,
+            "processor_res": 512,
+            "threshold_a": 64,
+            "threshold_b": 64,
+            "guidance": 1.0,
+            "guidance_start": 0.0,
+            "guidance_end": 1.0,
+            "guessmode": False,
+        }
+        res.append(cn_cur)
+    
+    return res
+
 def run_sd(files, **kwargs):
     """
     main function to connect to api
@@ -228,6 +469,9 @@ def run_sd(files, **kwargs):
         sd_seed=int
         sd_out_path=str
         is_rembg=bool
+        sd_base_image = String
+        sd_isImg2img  = bool
+        sd_cn_list    = array of cn
     """
     # process image
     start = 0
@@ -251,11 +495,14 @@ def run_sd(files, **kwargs):
         # print(files[i])
         cn_img   = raw_b64_img(Image.open(files[i]))
         # cn_mask_img   = b64_img(Image.open(files[i].replace("/in","/in_mask").replace(".png",".jpg")))
+        
+        cn_units = parseCN(getDictVal(kwargs,"sd_cn_list")) if getDictVal(kwargs,"sd_cn_list") else []
+
         body = {
             "init_images": [_sd_base_img] if _sd_base_img else [],
             "prompt": getDictVal(kwargs,"sd_prompt"),
             "negative_prompt": getDictVal(kwargs,"sd_negative_prompt"),
-            "seed": getDictVal(kwargs,"sd_seed") if "sd_seed" in kwargs else 888,
+            "seed": int(getDictVal(kwargs,"sd_seed")) if "sd_seed" in kwargs else 888,
             "subseed": -1,
             "subseed_strength": 0,
             "denoising_strength": 0.75,
@@ -272,24 +519,7 @@ def run_sd(files, **kwargs):
             {
                 "ControlNet":
                 {
-                    "args":
-                    [
-                        {
-                            "input_image": cn_img,
-                            "module": "none",
-                            "model": "control_openpose-fp16 [9ca67cc5]",
-                            "weight": 1,
-                            "resize_mode": "Scale to Fit (Inner Fit)",
-                            "lowvram": False,
-                            "processor_res": 512,
-                            "threshold_a": 64,
-                            "threshold_b": 64,
-                            "guidance": 1.0,
-                            "guidance_start": 0.0,
-                            "guidance_end": 1.0,
-                            "guessmode": False,
-                        }
-                    ]
+                    "args": cn_units
                 },
                 "Cutoff":
                 {
@@ -339,13 +569,13 @@ class BUtils:
         except:
             return print("Couldn't load the image.")
 
-    def bRender(self, outFolder, prefix = "Thuy"):
+    def bRender(self, outFolder, prefix = "Thuy", subfix = "openpose"):
         if not os.path.exists(outFolder):
             os.makedirs(outFolder)
 
         s=bpy.context.scene
         timestamp       = int(time.time())
-        temp_file       = "%s/"%outFolder+(f"{prefix}_{str(s.frame_current).zfill(4)}.png")
+        temp_file       = "%s/"%outFolder+(f"{prefix}_{subfix}_{str(s.frame_current).zfill(4)}.png")
         s.render.filepath = temp_file
         bpy.ops.render.render( #{'dict': "override"},
                                 #'INVOKE_DEFAULT',
@@ -379,7 +609,10 @@ class BUtils:
         sd_out_path         = f"{root}/sd_images"
         s=bpy.context.scene
         if not getDictVal(kwargs,"isanim"):
-            currentImgPath = self.bRender(sd_cn_image_folder)
+            sd_cn_list = getDictVal(kwargs,"sd_cn_list")
+            for i in range(len(sd_cn_list)):
+                currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[i].module)
+                sd_cn_list[i].sd_cn_img    = currentImgPath
 
             run_sd([currentImgPath],
                 sd_prompt           = getDictVal(kwargs,"sd_prompt"),
@@ -388,7 +621,8 @@ class BUtils:
                 sd_out_path         = sd_out_path,
                 sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
                 sd_base_image       = getDictVal(kwargs,"sd_base_image"),
-                sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img")
+                sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img"),
+                sd_cn_list          = sd_cn_list
             )
 
             output_path = currentImgPath.replace(sd_cn_image_folder,sd_out_path)
@@ -401,7 +635,10 @@ class BUtils:
             for i in range(s.frame_start,s.frame_end):
                 s.frame_current = i
 
-                currentImgPath = self.bRender(sd_cn_image_folder)
+                sd_cn_list = getDictVal(kwargs,"sd_cn_list")
+                for j in range(len(sd_cn_list)):
+                    currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[j].module)
+                    sc_cn_img[j].sd_cn_img    = currentImgPath
 
                 run_sd([currentImgPath],
                     sd_prompt           = getDictVal(kwargs,"sd_prompt"),
@@ -410,7 +647,8 @@ class BUtils:
                     sd_out_path         = sd_out_path,
                     sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
                     sd_base_image       = getDictVal(kwargs,"sd_base_image"),
-                    sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img")
+                    sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img"),
+                    sd_cn_list          = sd_cn_list
                 )
 
                 cn_img.append(currentImgPath)
