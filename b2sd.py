@@ -263,10 +263,10 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
         row.template_list("CUSTOM_UL_items", "custom_def_list", scn, "custom", scn, "custom_index", rows=rows)
 
         col     = row.column(align=True)
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='ADD', text="").action = 'ADD'
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='ADD',       text="").action = 'ADD'
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='REMOVE',    text="").action = 'REMOVE'
         col.separator()
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_UP', text="").action = 'UP'
+        col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_UP',   text="").action = 'UP'
         col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
 
         idx     = scn.custom_index
@@ -276,6 +276,11 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
             layout.prop(cn_item, "model" ,               text="model")
             layout.prop(cn_item, "resize_mode" ,         text="resize_mode")
             layout.prop(cn_item, "weight" ,              text="weight")
+            layout.prop(cn_item, "sd_guidance" ,         text="sd_guidance")
+            layout.prop(cn_item, "sd_guidance_start" ,   text="sd_guidance_start")
+            layout.prop(cn_item, "sd_guidance_end" ,     text="sd_guidance_end")
+            layout.prop(cn_item, "sd_guessmode" ,        text="sd_guessmode")
+            layout.prop(cn_item, "sd_lowvram" ,          text="sd_lowvram")
         except IndexError:
             pass
 
@@ -355,6 +360,37 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
         description="sd_cn_img",
         default=_webui_root,
         maxlen=1024
+        )
+    sd_guessmode : BoolProperty(
+        name="sd_guessmode",
+        description="sd_guessmode",
+        default = False
+        )
+    sd_lowvram : BoolProperty(
+        name="sd_lowvram",
+        description="sd_lowvram",
+        default = False
+        )
+    sd_guidance : FloatProperty(
+        name = "sd_guidance",
+        description="sd_guidance",
+        default = 1,
+        min = 0,
+        max = 1
+        )
+    sd_guidance_start : FloatProperty(
+        name = "sd_guidance_start",
+        description="sd_guidance_start",
+        default = 0,
+        min = 0,
+        max = 1
+        )
+    sd_guidance_end : FloatProperty(
+        name = "sd_guidance_end",
+        description="sd_guidance_end",
+        default = 1,
+        min = 0,
+        max = 1
         )
     # "input_image": cn_img,
     # "module": "none",
@@ -446,14 +482,14 @@ def parseCN(cn_list):
             "model": i.model,
             "weight": i.weight,
             "resize_mode": i.resize_mode,
-            "lowvram": False,
+            "lowvram": i.sd_lowvram,
             "processor_res": 512,
             "threshold_a": 64,
             "threshold_b": 64,
-            "guidance": 1.0,
-            "guidance_start": 0.0,
-            "guidance_end": 1.0,
-            "guessmode": False,
+            "guidance": i.sd_guidance,
+            "guidance_start": i.sd_guidance_start,
+            "guidance_end": i.sd_guidance_end,
+            "guessmode": i.sd_guessmode,
         }
         res.append(cn_cur)
     
@@ -611,7 +647,7 @@ class BUtils:
         if not getDictVal(kwargs,"isanim"):
             sd_cn_list = getDictVal(kwargs,"sd_cn_list")
             for i in range(len(sd_cn_list)):
-                currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[i].module)
+                currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[i].model.split("-")[0])
                 sd_cn_list[i].sd_cn_img    = currentImgPath
 
             run_sd([currentImgPath],
@@ -637,7 +673,7 @@ class BUtils:
 
                 sd_cn_list = getDictVal(kwargs,"sd_cn_list")
                 for j in range(len(sd_cn_list)):
-                    currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[j].module)
+                    currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[i].model.split("-")[0])
                     sc_cn_img[j].sd_cn_img    = currentImgPath
 
                 run_sd([currentImgPath],
