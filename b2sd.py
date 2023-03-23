@@ -667,9 +667,9 @@ class BUtils:
     def getControlNetList(self, scn, sd_cn_image_folder, sd_cn_list):
         res = []
         for j in range(len(sd_cn_list)):
-            module = sd_cn_list[j].module
-            self.hideColeByname(scn, module)
             if not sd_cn_list[j].render_collection: continue
+            coleName = sd_cn_list[j].render_collection.name
+            self.hideColeByname(scn, coleName)
             currentImgPath            = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[j].model.split("-")[0])
             sd_cn_list[j].sd_cn_img   = currentImgPath
             res.append(sd_cn_list[j])
