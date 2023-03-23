@@ -9,5 +9,5 @@ A public tool to connect blender to stable diffusion
 - [x] animation seq
 - [x] remove background
 - [x] img2img
+- [x] multi control net
 - [ ] support script extention
-- [ ] multi control net
