@@ -42,6 +42,17 @@ _prompt            = "a cute girl, shirt, shoes, hair, eyes, long jean pant,mono
 _negative_prompt   = "(low quality, worst quality:1.4), nsfw, EasyNegative"
 _seed              = "88888"
 
+_listModule = [
+    "none",        
+    "canny",       
+    "depth",       
+    "hed",         
+    "mlsd",        
+    "openpose",    
+    "scribble",    
+    "seg"         
+]
+
 # ==
 # UI
 # ==
@@ -144,6 +155,11 @@ class Button(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def traverse_tree(t):
+    yield t
+    for child in t.children:
+        yield from traverse_tree(child)
+
 class CUSTOM_OT_actions(Operator):
     """Move items up and down, add and remove"""
     bl_idname = "custom.list_action"
@@ -162,6 +178,17 @@ class CUSTOM_OT_actions(Operator):
         from mathutils import Color
         from random import random
         return Color((random(), random(), random()))
+
+    def createCole(self, scn, name = "none"):
+        coll = scn.collection
+        for c in traverse_tree(coll):
+            if c.name == name:
+                # c.hide_render = not c.hide_render
+                return c
+        
+        cole = bpy.data.collections.new(name)
+        scn.collection.children.link(cole)
+        return cole
 
     def invoke(self, context, event):
         scn = context.scene
@@ -199,6 +226,7 @@ class CUSTOM_OT_actions(Operator):
         if self.action == 'ADD':
             item = scn.custom.add()
             item.id = len(scn.custom)
+            item.sd_module = self.createCole(scn, "none")
             item.name = item.model
             col = self.random_color()
             scn.custom_index = (len(scn.custom)-1)
@@ -211,12 +239,19 @@ def printItem(self, value):
     scn = context.scene
     print(scn.custom[scn.custom_index])
 
+def checkModule(m):
+    res = m in _listModule
+    if not res:
+        print("module %s not in %s"%(m,_listModule))
+        return False
+    return True
+
 class CUSTOM_UL_items(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             split = layout.split(factor=0.3)
             split.label(text="Control net: %d" % (index))
-            split.label(text="module: %s" % (item.module))
+            split.label(text="module: %s" % (item.sd_module.name if item.sd_module else ""))
             # static method UILayout.icon returns the integer value of the icon ID
             # "computed" for the given RNA object.
             # split.prop(item, "module", text="", emboss=False)
@@ -272,7 +307,7 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
         idx     = scn.custom_index
         try:
             cn_item = scn.custom[idx]
-            layout.prop(cn_item, "module" ,              text="module")
+            layout.prop(cn_item, "sd_module" ,             text="sd_module")
             layout.prop(cn_item, "model" ,               text="model")
             layout.prop(cn_item, "resize_mode" ,         text="resize_mode")
             layout.prop(cn_item, "weight" ,              text="weight")
@@ -319,15 +354,15 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
             ("seg",         "seg",      "")
         )
 
-    # material: PointerProperty(
-    #     name="Material",
-    #     type=bpy.types.Material)
+    sd_module: PointerProperty(
+        name="sd_module",
+        type=bpy.types.Collection)
 
-    module : EnumProperty(
-        items=getControlNetModule,
-        name="module",
-        description="module",
-        )
+    # module : EnumProperty(
+    #     items=getControlNetModule,
+    #     name="module",
+    #     description="module",
+    #     )
     
     model : EnumProperty(
         items=getControlNetModel,
@@ -478,7 +513,7 @@ def parseCN(cn_list):
     for i in cn_list:
         cn_cur = {
             "input_image": raw_b64_img(Image.open(i.sd_cn_img)),
-            "module": i.module,
+            "module": i.sd_module.name,
             "model": i.model,
             "weight": i.weight,
             "resize_mode": i.resize_mode,
@@ -495,7 +530,7 @@ def parseCN(cn_list):
     
     return res
 
-def run_sd(files, **kwargs):
+def run_sd(fimg, **kwargs):
     """
     main function to connect to api
     kargs:
@@ -510,8 +545,8 @@ def run_sd(files, **kwargs):
         sd_cn_list    = array of cn
     """
     # process image
-    start = 0
-    end   = len(files)
+    # start = 0
+    # end   = len(files)
     # end   = 10
 
     sd_cmd = "txt2img"
@@ -527,67 +562,67 @@ def run_sd(files, **kwargs):
 
     url = f"http://localhost:7860/sdapi/v1/{sd_cmd}"
 
-    for i in range(start, end):
+    # for i in range(start, end):
         # print(files[i])
-        cn_img   = raw_b64_img(Image.open(files[i]))
+        # cn_img   = raw_b64_img(Image.open(files[i]))
         # cn_mask_img   = b64_img(Image.open(files[i].replace("/in","/in_mask").replace(".png",".jpg")))
         
-        cn_units = parseCN(getDictVal(kwargs,"sd_cn_list")) if getDictVal(kwargs,"sd_cn_list") else []
+    cn_units = parseCN(getDictVal(kwargs,"sd_cn_list")) if getDictVal(kwargs,"sd_cn_list") else []
 
-        body = {
-            "init_images": [_sd_base_img] if _sd_base_img else [],
-            "prompt": getDictVal(kwargs,"sd_prompt"),
-            "negative_prompt": getDictVal(kwargs,"sd_negative_prompt"),
-            "seed": int(getDictVal(kwargs,"sd_seed")) if "sd_seed" in kwargs else 888,
-            "subseed": -1,
-            "subseed_strength": 0,
-            "denoising_strength": 0.75,
-            "batch_size": 1,
-            "n_iter": 1,
-            "steps": 20,
-            "cfg_scale": 7,
-            "width": 512,
-            "height": 512,
-            "restore_faces": False,
-            "eta": 0,
-            "sampler_index": "DPM++ 2M Karras",
-            "alwayson_scripts":
+    body = {
+        "init_images": [_sd_base_img] if _sd_base_img else [],
+        "prompt": getDictVal(kwargs,"sd_prompt"),
+        "negative_prompt": getDictVal(kwargs,"sd_negative_prompt"),
+        "seed": int(getDictVal(kwargs,"sd_seed")) if "sd_seed" in kwargs else 888,
+        "subseed": -1,
+        "subseed_strength": 0,
+        "denoising_strength": 0.75,
+        "batch_size": 1,
+        "n_iter": 1,
+        "steps": 20,
+        "cfg_scale": 7,
+        "width": 512,
+        "height": 512,
+        "restore_faces": False,
+        "eta": 0,
+        "sampler_index": "DPM++ 2M Karras",
+        "alwayson_scripts":
+        {
+            "ControlNet":
             {
-                "ControlNet":
-                {
-                    "args": cn_units
-                },
-                "Cutoff":
-                {
-                    "args":
-                    [
-                        {
-                            "target_tokens": "white, green, red, blue, yellow, pink",
-                            "weight": 2
-                        }
-                    ]
-                }
+                "args": cn_units
+            },
+            "Cutoff":
+            {
+                "args":
+                [
+                    {
+                        "target_tokens": "white, green, red, blue, yellow, pink",
+                        "weight": 2
+                    }
+                ]
             }
         }
-        res = None
-        try:
-            res = requests.post(url, json=body).json()
-        except Exception as e:
-            print(e.message, e.args)
+    }
+    res = None
+    try:
+        res = requests.post(url, json=body).json()
+    except Exception as e:
+        print(e.message, e.args)
 
-        if not res: return
+    if not res: return
 
-        if not os.path.exists(getDictVal(kwargs,"sd_out_path")):
-            os.makedirs(getDictVal(kwargs,"sd_out_path"))
+    if not os.path.exists(getDictVal(kwargs,"sd_out_path")):
+        os.makedirs(getDictVal(kwargs,"sd_out_path"))
 
-        img = Image.open(io.BytesIO(base64.b64decode(res["images"][0])))
-        sd_out_img = "%s/%s"%(getDictVal(kwargs,"sd_out_path"),os.path.basename(files[i]))
-        img.save(sd_out_img)
+    img = Image.open(io.BytesIO(base64.b64decode(res["images"][0])))
+    sd_out_img = "%s/%s"%(getDictVal(kwargs,"sd_out_path"),os.path.basename(fimg))
+    img.save(sd_out_img)
 
-        if getDictVal(kwargs,"sd_isRembg"):
-            rmbg(sd_out_img)
+    if getDictVal(kwargs,"sd_isRembg"):
+        rmbg(sd_out_img)
 
-        print("sd_out_img: %s"%sd_out_img)
+    print("sd_out_img: %s"%sd_out_img)
 
 class BUtils:
     def __init__(self):
@@ -622,6 +657,39 @@ class BUtils:
         # print("render: %s"%temp_file)
         return temp_file
 
+    def hideColeByname(self, scn, name):
+        coll = scn.collection
+        for c in traverse_tree(coll):
+            if c.name != name:
+                c.hide_render = True
+            else:
+                c.hide_render = False
+
+    def getControlNetList(self, scn, sd_cn_image_folder, sd_cn_list):
+        res = []
+        for j in range(len(sd_cn_list)):
+            module = sd_cn_list[j].sd_module.name if sd_cn_list[j].sd_module else "none"
+            self.hideColeByname(scn, module)
+            if not checkModule(module): continue
+            currentImgPath            = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[j].model.split("-")[0])
+            sd_cn_list[j].sd_cn_img    = currentImgPath
+            res.append(sd_cn_list[j])
+        return res
+
+    def __sd_run(self, kwargs, sd_out_path, sd_cn_list):
+        currentImgPath = sd_cn_list[0].sd_cn_img
+        run_sd(currentImgPath,
+            sd_prompt           = getDictVal(kwargs,"sd_prompt"),
+            sd_negative_prompt  = getDictVal(kwargs,"sd_negative_prompt"),
+            sd_seed             = getDictVal(kwargs,"sd_seed"),
+            sd_out_path         = sd_out_path,
+            sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
+            sd_base_image       = getDictVal(kwargs,"sd_base_image"),
+            sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img"),
+            sd_cn_list          = sd_cn_list
+        )
+        return currentImgPath
+
     def doit(self, **kwargs):
         """
         Main Function to connect blender with SD
@@ -643,23 +711,13 @@ class BUtils:
         root = getDictVal(kwargs,"sd_root_out_path")
         sd_cn_image_folder  = f"{root}/cn_images"
         sd_out_path         = f"{root}/sd_images"
-        s=bpy.context.scene
-        if not getDictVal(kwargs,"isanim"):
-            sd_cn_list = getDictVal(kwargs,"sd_cn_list")
-            for i in range(len(sd_cn_list)):
-                currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[i].model.split("-")[0])
-                sd_cn_list[i].sd_cn_img    = currentImgPath
+        s                   = bpy.context.scene
 
-            run_sd([currentImgPath],
-                sd_prompt           = getDictVal(kwargs,"sd_prompt"),
-                sd_negative_prompt  = getDictVal(kwargs,"sd_negative_prompt"),
-                sd_seed             = getDictVal(kwargs,"sd_seed"),
-                sd_out_path         = sd_out_path,
-                sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
-                sd_base_image       = getDictVal(kwargs,"sd_base_image"),
-                sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img"),
-                sd_cn_list          = sd_cn_list
-            )
+        if not getDictVal(kwargs,"isanim"):
+            sd_cn_list = self.getControlNetList(s, sd_cn_image_folder, getDictVal(kwargs,"sd_cn_list"))
+
+            if not sd_cn_list: return
+            currentImgPath = self.__sd_run(kwargs, sd_out_path, sd_cn_list)
 
             output_path = currentImgPath.replace(sd_cn_image_folder,sd_out_path)
             if getDictVal(kwargs,"sd_isRembg"):
@@ -667,27 +725,13 @@ class BUtils:
             self.displayImg(output_path)
 
         else:
-            cn_img = []
             for i in range(s.frame_start,s.frame_end):
                 s.frame_current = i
 
-                sd_cn_list = getDictVal(kwargs,"sd_cn_list")
-                for j in range(len(sd_cn_list)):
-                    currentImgPath = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[i].model.split("-")[0])
-                    sc_cn_img[j].sd_cn_img    = currentImgPath
+                sd_cn_list = self.getControlNetList(s, sd_cn_image_folder, getDictVal(kwargs,"sd_cn_list"))
 
-                run_sd([currentImgPath],
-                    sd_prompt           = getDictVal(kwargs,"sd_prompt"),
-                    sd_negative_prompt  = getDictVal(kwargs,"sd_negative_prompt"),
-                    sd_seed             = getDictVal(kwargs,"sd_seed"),
-                    sd_out_path         = sd_out_path,
-                    sd_isRembg          = getDictVal(kwargs,"sd_isRembg"),
-                    sd_base_image       = getDictVal(kwargs,"sd_base_image"),
-                    sd_isImg2img        = getDictVal(kwargs,"sd_isImg2img"),
-                    sd_cn_list          = sd_cn_list
-                )
-
-                cn_img.append(currentImgPath)
+                if not sd_cn_list: return
+                currentImgPath = self.__sd_run(kwargs, sd_out_path, sd_cn_list)
 
 if __name__ == "__main__":
     register()
