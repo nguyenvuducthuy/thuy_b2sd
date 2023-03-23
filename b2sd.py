@@ -1,3 +1,4 @@
+from logging import exception
 import bpy
 from bpy.types import ( Panel,
                         Operator,
@@ -19,7 +20,6 @@ from PIL import Image
 import base64, io
 from pprint import pprint
 import tempfile
-from rembg import remove
 
 # ======
 # global
@@ -226,7 +226,7 @@ class CUSTOM_OT_actions(Operator):
         if self.action == 'ADD':
             item = scn.custom.add()
             item.id = len(scn.custom)
-            item.render_collection = self.createCole(scn, "none")
+            # item.render_collection = self.createCole(scn, "none")
             item.name = item.model
             col = self.random_color()
             scn.custom_index = (len(scn.custom)-1)
@@ -492,14 +492,19 @@ def getDictVal(_dict,key):
     return _dict[key] if key in _dict else ""
 
 def rmbg(input_path):
-    # input_path = 'input.png'
     output_path = "%s_rembg.png"%os.path.splitext(input_path)[0]
+    try:
+        from rembg import remove
+        # input_path = 'input.png'
 
-    _input = Image.open(input_path)
-    output = remove(_input)
-    output.save(output_path)
+        _input = Image.open(input_path)
+        output = remove(_input)
+        output.save(output_path)
 
-    print("rembg img: %s"%output_path)
+        print("rembg img: %s"%output_path)
+
+    except Exception as e:
+        print(e)
     return output_path
 
 def parseCN(cn_list):
