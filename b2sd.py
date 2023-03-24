@@ -42,6 +42,12 @@ _prompt            = "a cute girl, shirt, shoes, hair, eyes, long jean pant,mono
 _negative_prompt   = "(low quality, worst quality:1.4), nsfw, EasyNegative"
 _seed              = "88888"
 
+sd_input_parser = """
+a cute girl, white shirt with green tie, red shoes, blue hair, yellow eyes, pink skirt
+Negative prompt: (low quality, worst quality:1.4), nsfw
+Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 88888, Size: 512x512, Model hash: 0b9c8fd3a8, Model: macaronMix_v10, Denoising strength: 0.75, Mask blur: 4, ControlNet-0 Enabled: True, ControlNet-0 Module: hed, ControlNet-0 Model: control_hed-fp16 [13fee50b], ControlNet-0 Weight: 1, ControlNet-0 Guidance Start: 0, ControlNet-0 Guidance End: 1
+"""
+
 _listModule = [
     "none",        
     "canny",       
@@ -300,7 +306,7 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
         idx     = scn.custom_index
         try:
             cn_item = scn.custom[idx]
-            layout.prop(cn_item, "render_collection" ,           text="render_collection")
+            layout.prop(cn_item, "render_collection" ,   text="render_collection")
             layout.prop(cn_item, "module" ,              text="module")
             layout.prop(cn_item, "model" ,               text="model")
             layout.prop(cn_item, "resize_mode" ,         text="resize_mode")
@@ -593,12 +599,15 @@ def run_sd(fimg, **kwargs):
             },
             "Cutoff":
             {
-                "args":
-                [
-                    {
-                        "target_tokens": "white, green, red, blue, yellow, pink",
-                        "weight": 2
-                    }
+                "args": [
+                    True, # enabled: bool
+                    "white, green, red, blue, yellow, pink",  # targets: string
+                    2,  # weight: float
+                    False,  # disable_neg: bool
+                    False,  # strong: bool (Cutoff strongly)
+                    "",  # padding: string or int (Padding token (ID or single token))
+                    "Lerp",  # inpt: string (Interpolation method) Possible values: ["Lerp", "SLerp" ]
+                    False,  #debug: bool (useful if you want to make sure it's working, check the output below)
                 ]
             }
         }
