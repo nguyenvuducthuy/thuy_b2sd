@@ -27,6 +27,8 @@ try:
     from PIL import Image
 except Exception as e:
     print(e)
+    remove = None
+    Image = None
 
 # ======
 # global
@@ -476,13 +478,13 @@ def unregister():
 # ==============
 # Utils function
 # ==============
-def b64_img(image: Image):
+def b64_img(image):
     buffered = io.BytesIO()
     image.save(buffered, format="PNG")
     img_base64 = 'data:image/png;base64,' + str(base64.b64encode(buffered.getvalue()), 'utf-8')
     return img_base64
 
-def raw_b64_img(image: Image):
+def raw_b64_img(image):
     buffered = io.BytesIO()
     image.save(buffered, format="PNG")
     img_base64 = str(base64.b64encode(buffered.getvalue()), 'utf-8')
