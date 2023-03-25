@@ -10,4 +10,5 @@ A public tool to connect blender to stable diffusion
 - [x] remove background
 - [x] img2img
 - [x] multi control net
-- [ ] support script extention
+- [x] support script extention
+  - [x] https://github.com/hnmr293/sd-webui-cutoff
