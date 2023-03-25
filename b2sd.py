@@ -1,5 +1,5 @@
-from logging import exception
-from ntpath import join
+# from logging import exception
+# from ntpath import join
 import bpy
 from bpy.types import ( Panel,
                         Operator,
@@ -15,13 +15,18 @@ from bpy.props import (StringProperty,
                        CollectionProperty,
                        PointerProperty
                        )
-from bpy.app.handlers import persistent
+# from bpy.app.handlers import persistent
 import requests, os, time, math
 import base64, io
-from pprint import pprint
 import tempfile
 import re
 from pprint import pprint
+
+try:
+    from rembg import remove
+    from PIL import Image
+except Exception as e:
+    print(e)
 
 # ======
 # global
@@ -49,15 +54,25 @@ a cute girl, white shirt with green tie, red shoes, blue hair, yellow eyes, pink
 """
 _input_parser_regex = r'((?P<prompt>(.*))(?P<nprompt>(Negative prompt.*))|)(?P<steps>Steps.*)(?P<sampler_index>Sampler.*)(?P<cfg_scale>CFG scale.*)(?P<seed>Seed.*)(?P<size>Size.*)(?P<modelhash>Model hash.*)(?P<model>Model.*)(?P<denoising_strength>Denoising strength.*)(?P<del>Mask blur)'
 
-_listModule = [
-    "none",        
-    "canny",       
-    "depth",       
-    "hed",         
-    "mlsd",        
-    "openpose",    
-    "scribble",    
-    "seg"         
+_list_sd_Module = [
+    "none",
+    "canny",
+    "depth",
+    "hed",
+    "mlsd",
+    "openpose",
+    "scribble",
+    "seg"
+]
+
+_list_sd_Model = [
+    "control_canny-fp16 [e3fe7712]",
+    "control_depth-fp16 [400750f6]",
+    "control_hed-fp16 [13fee50b]",
+    "control_mlsd-fp16 [e3705cfa]",
+    "control_openpose-fp16 [9ca67cc5]",
+    "control_scribble-fp16 [c508311e]",
+    "control_seg-fp16 [b9c1cc12]"
 ]
 
 # ==
@@ -71,8 +86,8 @@ bl_info = {
     "location": "View3D > N",
     "description": "A tool for simplify a workflow from Blender to Stable Diffsion",
     "warning": "",
-    "doc_url": "",
-    "category": "",
+    "doc_url": "https://github.com/nguyenvuducthuy/thuy_b2sd/wiki",
+    "category": "anhungxadieu",
 }
 
 class b2sdSettings(PropertyGroup):
@@ -199,7 +214,7 @@ class CUSTOM_OT_actions(Operator):
             if c.name == name:
                 # c.hide_render = not c.hide_render
                 return c
-        
+
         cole = bpy.data.collections.new(name)
         scn.collection.children.link(cole)
         return cole
@@ -258,7 +273,7 @@ class CUSTOM_UL_items(UIList):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             split = layout.split(factor=0.3)
             split.label(text="Control net: %d" % (index))
-            split.label(text="module: %s" % item.module)
+            split.label(text="%s" % item.model)
             # static method UILayout.icon returns the integer value of the icon ID
             # "computed" for the given RNA object.
             # split.prop(item, "module", text="", emboss=False)
@@ -346,27 +361,16 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
     """
 
     def getControlNetModel(self, context):
-        return (
-            ("control_canny-fp16 [e3fe7712]",    "control_canny-fp16 [e3fe7712]",     ""),
-            ("control_depth-fp16 [400750f6]",    "control_depth-fp16 [400750f6]",     ""),
-            ("control_hed-fp16 [13fee50b]",      "control_hed-fp16 [13fee50b]",       ""),
-            ("control_mlsd-fp16 [e3705cfa]",     "control_mlsd-fp16 [e3705cfa]" ,     ""),
-            ("control_openpose-fp16 [9ca67cc5]", "control_openpose-fp16 [9ca67cc5]" , ""),
-            ("control_scribble-fp16 [c508311e]", "control_scribble-fp16 [c508311e]" , ""),
-            ("control_seg-fp16 [b9c1cc12]",      "control_seg-fp16 [b9c1cc12]",       "")
-        )
+        res = ()
+        for i in _list_sd_Model:
+            res += ((i, i, ""),)
+        return res
 
     def getControlNetModule(self, context):
-        return (
-            ("none",        "none",     ""),
-            ("canny",       "canny",    ""),
-            ("depth",       "depth",    ""),
-            ("hed",         "hed",      ""),
-            ("mlsd",        "mlsd" ,    ""),
-            ("openpose",    "openpose" ,""),
-            ("scribble",    "scribble" ,""),
-            ("seg",         "seg",      "")
-        )
+        res = ()
+        for i in _list_sd_Module:
+            res += ((i, i, ""),)
+        return res
 
     render_collection: PointerProperty(
         name="render_collection",
@@ -377,13 +381,13 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
         name="module",
         description="module",
         )
-    
+
     model : EnumProperty(
         items=getControlNetModel,
         name="model",
         description="model",
         )
-    
+
     weight : FloatProperty(
         name = "weight",
         description="weight",
@@ -486,25 +490,37 @@ def raw_b64_img(image: Image):
 
 def decode_b64(base64_img):
     try:
-        res = base64.b64decode(base64_img.replace("data:image/png;base64,", ""))
+        res = None
+        if not Image:
+            res = base64.b64decode(base64_img.replace("data:image/png;base64,", ""))
+        else:
+            res = Image.open(io.BytesIO(base64.b64decode(base64_img)))
         return res
     except:
         print("Couldn't decode base64 image.")
-        return 
+        return
 
 def encode_b64(in_img):
     try:
-        img_file = open(in_img, 'rb')
-        res = base64.b64encode(img_file.read()).decode()
-        img_file.close()
+        res = None
+        if Image:
+            res = Image.open(in_img)
+            res = raw_b64_img(res)
+        else:
+            img_file = open(in_img, 'rb')
+            res = base64.b64encode(img_file.read()).decode()
+            img_file.close()
         return res
     except:
         print("Couldn't encode base64 image.")
-        return 
+        return
 
 def save_b64(path, img):
-    with open(path, 'wb') as file:
-        file.write(img)
+    if Image:
+        img.save(path)
+    else:
+        with open(path, 'wb') as file:
+            file.write(img)
 
 def getAllFilesInFolder(folder):
     """
@@ -520,13 +536,9 @@ def getAllFilesInFolder(folder):
 def getDictVal(_dict,key):
     return _dict[key] if key in _dict else ""
 
-def rmbg(input_path):
+def _rembg(input_path):
     output_path = "%s_rembg.png"%os.path.splitext(input_path)[0]
     try:
-        from rembg import remove
-        from PIL import Image
-        # input_path = 'input.png'
-
         _input = Image.open(input_path)
         output = remove(_input)
         output.save(output_path)
@@ -556,7 +568,7 @@ def parseCN(cn_list):
             "guessmode": i.sd_guessmode,
         }
         res.append(cn_cur)
-    
+
     return res
 
 def parseSDArgs(args):
@@ -681,14 +693,17 @@ def run_sd(fimg, kwargs):
     if not os.path.exists(sd_out_path):
         os.makedirs(sd_out_path)
 
-    sd_out_img = "%s/%s"%(sd_out_path,os.path.basename(fimg))
-    save_b64(sd_out_img, decode_b64(res["images"][0]))
+    sd_out_img_path = "%s/%s"%(sd_out_path,os.path.basename(fimg))
+    save_b64(sd_out_img_path, decode_b64(res["images"][0]))
 
     if getDictVal(kwargs,"sd_isRembg"):
-        rmbg(sd_out_img)
+        _rembg(sd_out_img_path)
 
-    print("sd_out_img: %s"%sd_out_img)
+    print("sd_out_img: %s"%sd_out_img_path)
 
+# =====
+# class
+# =====
 class BUtils:
     def __init__(self):
         self.DATA = {}
@@ -713,6 +728,7 @@ class BUtils:
         timestamp       = int(time.time())
         temp_file       = "%s/"%outFolder+(f"{prefix}_{subfix}_{str(s.frame_current).zfill(4)}.png")
         s.render.filepath = temp_file
+        # s.render.filepath = "//" # todo
         bpy.ops.render.render( #{'dict': "override"},
                                 #'INVOKE_DEFAULT',
                                 False,            # undo support
@@ -737,14 +753,14 @@ class BUtils:
                 print("%s have render_collection parameter is empty"%sd_cn_list[j].model)
                 continue
             coleName = sd_cn_list[j].render_collection.name
-            self.hideColeByname(scn, coleName)
+            self.hideColeByname(scn, coleName) #todo this is wrong 
             currentImgPath            = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[j].model.split("-")[0])
             sd_cn_list[j].sd_cn_img   = currentImgPath
             res.append(sd_cn_list[j])
         return res
 
-    def __sd_run(self, kwargs, sd_out_path, sd_cn_list):
-        currentImgPath = sd_cn_list[0].sd_cn_img
+    def __sd_run(self, kwargs):
+        currentImgPath = kwargs["sd_cn_list"][0].sd_cn_img
         run_sd(currentImgPath, kwargs)
         return currentImgPath
 
@@ -779,7 +795,7 @@ class BUtils:
                 print("control net is fail")
                 return
             kwargs["sd_cn_list"]  = sd_cn_list
-            currentImgPath = self.__sd_run(kwargs, kwargs["sd_out_path"], sd_cn_list)
+            currentImgPath = self.__sd_run(kwargs)
 
             output_path = currentImgPath.replace(sd_cn_image_folder,kwargs["sd_out_path"])
             if getDictVal(kwargs,"sd_isRembg"):
@@ -792,10 +808,11 @@ class BUtils:
 
                 sd_cn_list = self.getControlNetList(scn, sd_cn_image_folder, getDictVal(kwargs,"sd_cn_list"))
 
-                if not sd_cn_list: 
+                if not sd_cn_list:
                     print("control net is fail")
                     return
-                currentImgPath = self.__sd_run(kwargs, kwargs["sd_out_path"], sd_cn_list)
+                kwargs["sd_cn_list"]  = sd_cn_list
+                currentImgPath = self.__sd_run(kwargs)
 
 if __name__ == "__main__":
     register()
