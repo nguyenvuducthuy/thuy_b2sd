@@ -275,7 +275,7 @@ class CUSTOM_UL_items(UIList):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             split = layout.split(factor=0.3)
             split.label(text="Control net: %d" % (index))
-            split.label(text="%s" % item.model)
+            split.label(text="%s" % re.search(r'_(?P<model>.*?)-',item.model)["model"])
             # static method UILayout.icon returns the integer value of the icon ID
             # "computed" for the given RNA object.
             # split.prop(item, "module", text="", emboss=False)
@@ -537,9 +537,6 @@ def getAllFilesInFolder(folder):
         res_files.append(os.path.join(folder,f))
     return res_files
 
-def getDictVal(_dict,key):
-    return _dict[key] if key in _dict else ""
-
 def _rembg(input_path):
     output_path = "%s_rembg.png"%os.path.splitext(input_path)[0]
     try:
@@ -628,8 +625,8 @@ def run_sd(fimg, kwargs):
     sd_cmd = "txt2img"
 
     _sd_base_img = ""
-    _sd_base_img_path = getDictVal(kwargs,"sd_base_image")
-    _sd_isImg2img     = getDictVal(kwargs,"sd_isImg2img")
+    _sd_base_img_path = kwargs["sd_base_image"]
+    _sd_isImg2img     = kwargs["sd_isImg2img"]
     if _sd_base_img_path and _sd_isImg2img:
         isExists = os.path.isfile(_sd_base_img_path)
         if not isExists:
@@ -642,25 +639,25 @@ def run_sd(fimg, kwargs):
 
     url = f"http://localhost:7860/sdapi/v1/{sd_cmd}"
 
-    cn_units = parseCN(getDictVal(kwargs,"sd_cn_list")) if getDictVal(kwargs,"sd_cn_list") else []
+    cn_units = parseCN(kwargs["sd_cn_list"]) if kwargs["sd_cn_list"] else []
 
     body = {
-        "init_images": [_sd_base_img] if _sd_base_img else [],
-        "prompt": getDictVal(kwargs,"sd_prompt"),
-        "negative_prompt": getDictVal(kwargs,"sd_negative_prompt"),
-        "seed": int(getDictVal(kwargs,"sd_seed")) if "sd_seed" in kwargs else 888,
-        "subseed": -1,
-        "subseed_strength": 0,
-        "denoising_strength": kwargs["sd_args"]["denoising_strength"],
-        "batch_size": 1,
-        "n_iter": 1,
-        "steps": kwargs["sd_args"]["steps"],
-        "cfg_scale": kwargs["sd_args"]["cfg_scale"],
-        "width": 512,
-        "height": 512,
-        "restore_faces": False,
-        "eta": 0,
-        "sampler_index": kwargs["sd_args"]["sampler_index"],
+        "init_images":          [_sd_base_img] if _sd_base_img else [],
+        "prompt":               kwargs["sd_prompt"],
+        "negative_prompt":      kwargs["sd_negative_prompt"],
+        "seed":                 int(kwargs["sd_seed"]),
+        "subseed":              -1,
+        "subseed_strength":     0,
+        "denoising_strength":   kwargs["sd_args"]["denoising_strength"],
+        "batch_size":           1,
+        "n_iter":               1,
+        "steps":                kwargs["sd_args"]["steps"],
+        "cfg_scale":            kwargs["sd_args"]["cfg_scale"],
+        "width":                int(kwargs["sd_rw"]),
+        "height":               int(kwargs["sd_rh"]),
+        "restore_faces":        False,
+        "eta":                  0,
+        "sampler_index":        kwargs["sd_args"]["sampler_index"],
         "alwayson_scripts":
         {
             "ControlNet":
@@ -691,7 +688,7 @@ def run_sd(fimg, kwargs):
     if not res: return
 
 
-    sd_out_path = getDictVal(kwargs,"sd_out_path")
+    sd_out_path = kwargs["sd_out_path"]
     if not sd_out_path:
         print("%s fail"%sd_out_path)
         return
@@ -701,7 +698,7 @@ def run_sd(fimg, kwargs):
     sd_out_img_path = "%s/%s"%(sd_out_path,os.path.basename(fimg))
     save_b64(sd_out_img_path, decode_b64(res["images"][0]))
 
-    if getDictVal(kwargs,"sd_isRembg"):
+    if kwargs["sd_isRembg"]:
         _rembg(sd_out_img_path)
 
     print("sd_out_img: %s"%sd_out_img_path)
@@ -711,7 +708,11 @@ def run_sd(fimg, kwargs):
 # =====
 class BUtils:
     def __init__(self):
-        self.DATA = {}
+        self.scn = bpy.context.scene
+        self.DATA = {
+            "sd_rw"  : self.scn.render.resolution_x,
+            "sd_rh"  : self.scn.render.resolution_y
+        }
 
     def displayImg(self, img_path):
         bpy.ops.render.opengl('INVOKE_DEFAULT')
@@ -742,9 +743,9 @@ class BUtils:
         #                         )
 
         bpy.ops.render.render(
-            animation=False, 
-            write_still=True, 
-            use_viewport=False, 
+            animation=False,
+            write_still=True,
+            use_viewport=False,
             layer=subfix
             )
 
@@ -765,12 +766,14 @@ class BUtils:
             match_name = None
             for i in scn.view_layers:
                 n = i.name
-                re_match = re.match(name, n, re.IGNORECASE)
+                re_match = name.lower() == n.lower()
                 if re_match:
                     match_name = n
                     print("found a render layer: %s"%n)
                     break
-            if not match_name: return
+            if not match_name:
+                print("cannot find a render layer: %s"%name)
+                return
 
             # vl = scn.view_layers[match_name]
             # bpy.context.window.view_layer = vl
@@ -793,7 +796,8 @@ class BUtils:
             modelName = re.search(r'_(?P<model>.*?)-',sd_cn_list[j].model)["model"]
 
             renderLayerName = self.getRenderLayer(scn, modelName)
-            # self.hideColeByname(scn, coleName) #todo this is wrong 
+            if not renderLayerName: continue
+            # self.hideColeByname(scn, coleName) #todo this is wrong
             currentImgPath            = self.bRender(sd_cn_image_folder, subfix = renderLayerName)
             sd_cn_list[j].sd_cn_img   = currentImgPath
             res.append(sd_cn_list[j])
@@ -806,9 +810,12 @@ class BUtils:
 
     def doit(self, **kwargs):
         """
-        Main Function to connect blender with SD
-        isanim : bool
+        isRenAnim : bool
             set it true when you want to render seq
+        sd_isImg2img : bool
+            set it true when you want to use img2img
+        sd_base_image : str
+            a base image for imag2img cmd
         sd_prompt : str
             sd prompt
         sd_negative_prompt : str
@@ -817,19 +824,26 @@ class BUtils:
             sd seed
         sd_root_out_path : str
             output folder
-        sd_isRembg : bool
+        sd_isrembg : bool
             remove bg in sd output img
-        sd_base_image : str
-            base image for img2img cmd
+        sd_rw: int
+            render width
+        sd_rh: int
+            render height
+        sd_args : string
+            some parameters from stable diffusion webui
+            ex:
+                Steps: 20, Sampler: DPM++ 2M Karras, CFG scale: 7, Seed: 88888, Size: 512x512, Model hash: 0b9c8fd3a8, Model: macaronMix_v10, Denoising strength: 0.75
         """
-        kwargs["sd_args"]       = parseSDArgs(getDictVal(kwargs,"sd_args"))
-        root                    = getDictVal(kwargs,"sd_root_out_path")
+        kwargs["sd_args"]       = parseSDArgs(kwargs["sd_args"])
+        root                    = kwargs["sd_root_out_path"]
         sd_cn_image_folder      = f"{root}/cn_images"
         kwargs["sd_out_path"]   = f"{root}/sd_images"
-        scn                     = bpy.context.scene
+        kwargs["sd_rw"]         = self.DATA["sd_rw"]
+        kwargs["sd_rh"]         = self.DATA["sd_rh"]
 
-        if not getDictVal(kwargs,"isanim"):
-            sd_cn_list = self.getControlNetList(scn, sd_cn_image_folder, getDictVal(kwargs,"sd_cn_list"))
+        if not kwargs["isanim"]:
+            sd_cn_list = self.getControlNetList(self.scn, sd_cn_image_folder, kwargs["sd_cn_list"])
 
             if not sd_cn_list:
                 print("control net is fail")
@@ -838,15 +852,15 @@ class BUtils:
             currentImgPath = self.__sd_run(kwargs)
 
             output_path = currentImgPath.replace(sd_cn_image_folder,kwargs["sd_out_path"])
-            if getDictVal(kwargs,"sd_isRembg"):
+            if kwargs["sd_isRembg"]:
                 output_path = "%s_rembg.png"%os.path.splitext(output_path)[0]
             self.displayImg(output_path)
 
         else:
-            for i in range(scn.frame_start,scn.frame_end):
-                scn.frame_current = i
+            for i in range(self.scn.frame_start,self.scn.frame_end):
+                self.scn.frame_current = i
 
-                sd_cn_list = self.getControlNetList(scn, sd_cn_image_folder, getDictVal(kwargs,"sd_cn_list"))
+                sd_cn_list = self.getControlNetList(self.scn, sd_cn_image_folder, kwargs["sd_cn_list"])
 
                 if not sd_cn_list:
                     print("control net is fail")
