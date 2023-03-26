@@ -12,3 +12,5 @@ A public tool to connect blender to stable diffusion
 - [x] multi control net
 - [x] support script extention
   - [x] https://github.com/hnmr293/sd-webui-cutoff
+  - [ ] https://huggingface.co/CiaraRowles/TemporalNet
+  - [ ] https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111
