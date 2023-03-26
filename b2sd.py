@@ -92,7 +92,7 @@ bl_info = {
     "category": "anhungxadieu",
 }
 
-class b2sdSettings(PropertyGroup):
+class CUSTOM_PG_b2sdSettings(PropertyGroup):
     """
     ------------------------------------
     Store properties in the active scene
@@ -332,7 +332,8 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
         idx     = scn.custom_index
         try:
             cn_item = scn.custom[idx]
-            layout.prop(cn_item, "render_collection" ,   text="render_collection")
+            # layout.prop(cn_item, "render_collection" ,   text="render_collection")
+            layout.prop(cn_item, "sd_invert_image" ,     text="sd_invert_image")
             layout.prop(cn_item, "module" ,              text="module")
             layout.prop(cn_item, "model" ,               text="model")
             layout.prop(cn_item, "resize_mode" ,         text="resize_mode")
@@ -377,19 +378,16 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
     render_collection: PointerProperty(
         name="render_collection",
         type=bpy.types.Collection)
-
     module : EnumProperty(
         items=getControlNetModule,
         name="module",
         description="module",
         )
-
     model : EnumProperty(
         items=getControlNetModel,
         name="model",
         description="model",
         )
-
     weight : FloatProperty(
         name = "weight",
         description="weight",
@@ -397,7 +395,6 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
         min = 0,
         max = 1
         )
-
     resize_mode : EnumProperty(
         items=(
             ("Scale to Fit (Inner Fit)", "Scale to Fit (Inner Fit)", ""),
@@ -447,11 +444,16 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
         min = 0,
         max = 1
         )
+    sd_invert_image : BoolProperty(
+        name="sd_invert_image",
+        description="sd_invert_image",
+        default = False
+        )
 
 _classes=[
 Button,
 B2SD_PT_main_pannel,
-b2sdSettings,
+CUSTOM_PG_b2sdSettings,
 CUSTOM_OT_actions,
 CUSTOM_UL_items,
 CUSTOM_PG_ControlNetCollection
@@ -462,7 +464,7 @@ def register():
     for cls in _classes:
         register_class(cls)
 
-    bpy.types.Scene.b2sd = PointerProperty(type=b2sdSettings)
+    bpy.types.Scene.b2sd = PointerProperty(type=CUSTOM_PG_b2sdSettings)
     bpy.types.Scene.custom = CollectionProperty(type=CUSTOM_PG_ControlNetCollection)
     bpy.types.Scene.custom_index = IntProperty()
 
@@ -568,6 +570,7 @@ def parseCN(cn_list):
             "guidance_start": i.sd_guidance_start,
             "guidance_end": i.sd_guidance_end,
             "guessmode": i.sd_guessmode,
+            "invert_image": i.sd_invert_image,
         }
         res.append(cn_cur)
 
@@ -731,12 +734,20 @@ class BUtils:
         temp_file       = "%s/"%outFolder+(f"{prefix}_{subfix}_{str(s.frame_current).zfill(4)}.png")
         s.render.filepath = temp_file
         # s.render.filepath = "//" # todo
-        bpy.ops.render.render( #{'dict': "override"},
-                                #'INVOKE_DEFAULT',
-                                False,            # undo support
-                                animation=False,
-                                write_still=True
-                                )
+        # bpy.ops.render.render( #{'dict': "override"},
+        #                         #'INVOKE_DEFAULT',
+        #                         False,            # undo support
+        #                         animation=False,
+        #                         write_still=True
+        #                         )
+
+        bpy.ops.render.render(
+            animation=False, 
+            write_still=True, 
+            use_viewport=False, 
+            layer=subfix
+            )
+
         # print("render: %s"%temp_file)
         return temp_file
 
@@ -748,15 +759,42 @@ class BUtils:
             else:
                 c.hide_render = False
 
+    def getRenderLayer(self, scn, name):
+        # render_layers = scn.view_layers
+        try:
+            match_name = None
+            for i in scn.view_layers:
+                n = i.name
+                re_match = re.match(name, n, re.IGNORECASE)
+                if re_match:
+                    match_name = n
+                    print("found a render layer: %s"%n)
+                    break
+            if not match_name: return
+
+            # vl = scn.view_layers[match_name]
+            # bpy.context.window.view_layer = vl
+            # bpy.context.window.view_layer.use = True
+            # print("show %s"%name)
+
+            return match_name
+        except Exception as e:
+            print(e)
+            return
+
     def getControlNetList(self, scn, sd_cn_image_folder, sd_cn_list):
         res = []
         for j in range(len(sd_cn_list)):
-            if not sd_cn_list[j].render_collection:
-                print("%s have render_collection parameter is empty"%sd_cn_list[j].model)
-                continue
-            coleName = sd_cn_list[j].render_collection.name
-            self.hideColeByname(scn, coleName) #todo this is wrong 
-            currentImgPath            = self.bRender(sd_cn_image_folder, subfix = sd_cn_list[j].model.split("-")[0])
+            # if not sd_cn_list[j].render_collection:
+            #     print("%s have render_collection parameter is empty"%sd_cn_list[j].model)
+            #     continue
+            # coleName = sd_cn_list[j].render_collection.name
+
+            modelName = re.search(r'_(?P<model>.*?)-',sd_cn_list[j].model)["model"]
+
+            renderLayerName = self.getRenderLayer(scn, modelName)
+            # self.hideColeByname(scn, coleName) #todo this is wrong 
+            currentImgPath            = self.bRender(sd_cn_image_folder, subfix = renderLayerName)
             sd_cn_list[j].sd_cn_img   = currentImgPath
             res.append(sd_cn_list[j])
         return res
