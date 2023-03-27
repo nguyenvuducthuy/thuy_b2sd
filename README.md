@@ -2,7 +2,7 @@
 A public tool to connect blender to stable diffusion
 
 ## Chat
-- https://discord.gg/MebZKdyGmh
+- https://discord.gg/uDHjaeyX
 
 ## Current development
 - [x] txt2image
