@@ -46,7 +46,6 @@ bl_info = {
 }
 
 TEMP_FOLDER = tempfile.gettempdir()
-# TEMP_FOLDER = "J:/thuy_blender/B2SD/OUT/tmp/img2img"
 
 _out_path     = TEMP_FOLDER
 _base_image   = "%s/base/base.png"%TEMP_FOLDER
