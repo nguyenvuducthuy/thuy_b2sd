@@ -16,10 +16,10 @@ from bpy.props import (StringProperty,
                        PointerProperty
                        )
 # from bpy.app.handlers import persistent
-import requests, os, time, math
+import requests, os, time, math, sys
 import base64, io
 import tempfile
-import re
+import re, json
 from pprint import pprint
 
 try:
@@ -33,7 +33,20 @@ except Exception as e:
 # ======
 # global
 # ======
+bl_info = {
+    "name": "Blender to Stable Diffusion",
+    "author": "anhungxadieu",
+    "version": (0, 0, 1),
+    "blender": (2, 80, 0),
+    "location": "View3D > N",
+    "description": "A tool for simplify a workflow from Blender to Stable Diffsion",
+    "warning": "",
+    "doc_url": "https://github.com/nguyenvuducthuy/thuy_b2sd/wiki",
+    "category": "anhungxadieu",
+}
+
 TEMP_FOLDER = tempfile.gettempdir()
+# TEMP_FOLDER = "J:/thuy_blender/B2SD/OUT/tmp/img2img"
 
 _out_path     = TEMP_FOLDER
 _base_image   = "%s/base/base.png"%TEMP_FOLDER
@@ -77,22 +90,542 @@ _list_sd_Model = [
     "control_seg-fp16 [b9c1cc12]"
 ]
 
+# ====
+# DATA
+# ====
+_segData = {
+    "idx": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "29",
+        "30",
+        "31",
+        "32",
+        "33",
+        "34",
+        "35",
+        "36",
+        "37",
+        "38",
+        "39",
+        "40",
+        "41",
+        "42",
+        "43",
+        "44",
+        "45",
+        "46",
+        "47",
+        "48",
+        "49",
+        "50",
+        "51",
+        "52",
+        "53",
+        "54",
+        "55",
+        "56",
+        "57",
+        "58",
+        "59",
+        "60",
+        "61",
+        "62",
+        "63",
+        "64",
+        "65",
+        "66",
+        "67",
+        "68",
+        "69",
+        "70",
+        "71",
+        "72",
+        "73",
+        "74",
+        "75",
+        "76",
+        "77",
+        "78",
+        "79",
+        "80",
+        "81",
+        "82",
+        "83",
+        "84",
+        "85",
+        "86",
+        "87",
+        "88",
+        "89",
+        "90",
+        "91",
+        "92",
+        "93",
+        "94",
+        "95",
+        "96",
+        "97",
+        "98",
+        "99",
+        "100",
+        "101",
+        "102",
+        "103",
+        "104",
+        "105",
+        "106",
+        "107",
+        "108",
+        "109",
+        "110",
+        "111",
+        "112",
+        "113",
+        "114",
+        "115",
+        "116",
+        "117",
+        "118",
+        "119",
+        "120",
+        "121",
+        "122",
+        "123",
+        "124",
+        "125",
+        "126",
+        "127",
+        "128",
+        "129",
+        "130",
+        "131",
+        "132",
+        "133",
+        "134",
+        "135",
+        "136",
+        "137",
+        "138",
+        "139",
+        "140",
+        "141",
+        "142",
+        "143",
+        "144",
+        "145",
+        "146",
+        "147",
+        "148",
+        "149",
+        "150"
+    ],
+    "color": [
+        "(120, 120, 120)",
+        "(180, 120, 120)",
+        "(6, 230, 230)",
+        "(80, 50, 50)",
+        "(4, 200, 3)",
+        "(120, 120, 80)",
+        "(140, 140, 140)",
+        "(204, 5, 255)",
+        "(230, 230, 230)",
+        "(4, 250, 7)",
+        "(224, 5, 255)",
+        "(235, 255, 7)",
+        "(150, 5, 61)",
+        "(120, 120, 70)",
+        "(8, 255, 51)",
+        "(255, 6, 82)",
+        "(143, 255, 140)",
+        "(204, 255, 4)",
+        "(255, 51, 7)",
+        "(204, 70, 3)",
+        "(0, 102, 200)",
+        "(61, 230, 250)",
+        "(255, 6, 51)",
+        "(11, 102, 255)",
+        "(255, 7, 71)",
+        "(255, 9, 224)",
+        "(9, 7, 230)",
+        "(220, 220, 220)",
+        "(255, 9, 92)",
+        "(112, 9, 255)",
+        "(8, 255, 214)",
+        "(7, 255, 224)",
+        "(255, 184, 6)",
+        "(10, 255, 71)",
+        "(255, 41, 10)",
+        "(7, 255, 255)",
+        "(224, 255, 8)",
+        "(102, 8, 255)",
+        "(255, 61, 6)",
+        "(255, 194, 7)",
+        "(255, 122, 8)",
+        "(0, 255, 20)",
+        "(255, 8, 41)",
+        "(255, 5, 153)",
+        "(6, 51, 255)",
+        "(235, 12, 255)",
+        "(160, 150, 20)",
+        "(0, 163, 255)",
+        "(140, 140, 140)",
+        "(0250, 10, 15)",
+        "(20, 255, 0)",
+        "(31, 255, 0)",
+        "(255, 31, 0)",
+        "(255, 224, 0)",
+        "(153, 255, 0)",
+        "(0, 0, 255)",
+        "(255, 71, 0)",
+        "(0, 235, 255)",
+        "(0, 173, 255)",
+        "(31, 0, 255)",
+        "(11, 200, 200)",
+        "(255 ,82, 0)",
+        "(0, 255, 245)",
+        "(0, 61, 255)",
+        "(0, 255, 112)",
+        "(0, 255, 133)",
+        "(255, 0, 0)",
+        "(255, 163, 0)",
+        "(255, 102, 0)",
+        "(194, 255, 0)",
+        "(0, 143, 255)",
+        "(51, 255, 0)",
+        "(0, 82, 255)",
+        "(0, 255, 41)",
+        "(0, 255, 173)",
+        "(10, 0, 255)",
+        "(173, 255, 0)",
+        "(0, 255, 153)",
+        "(255, 92, 0)",
+        "(255, 0, 255)",
+        "(255, 0, 245)",
+        "(255, 0, 102)",
+        "(255, 173, 0)",
+        "(255, 0, 20)",
+        "(255, 184, 184)",
+        "(0, 31, 255)",
+        "(0, 255, 61)",
+        "(0, 71, 255)",
+        "(255, 0, 204)",
+        "(0, 255, 194)",
+        "(0, 255, 82)",
+        "(0, 10, 255)",
+        "(0, 112, 255)",
+        "(51, 0, 255)",
+        "(0, 194, 255)",
+        "(0, 122, 255)",
+        "(0, 255, 163)",
+        "(255, 153, 0)",
+        "(0, 255, 10)",
+        "(255, 112, 0)",
+        "(143, 255, 0)",
+        "(82, 0, 255)",
+        "(163, 255, 0)",
+        "(255, 235, 0)",
+        "(8, 184, 170)",
+        "(133, 0, 255)",
+        "(0, 255, 92)",
+        "(184, 0, 255)",
+        "(255, 0, 31)",
+        "(0, 184, 255)",
+        "(0, 214, 255)",
+        "(255, 0, 112)",
+        "(92, 255, 0)",
+        "(0, 224, 255)",
+        "(112, 224, 255)",
+        "(70, 184, 160)",
+        "(163, 0, 255)",
+        "(153, 0, 255)",
+        "(71, 255, 0)",
+        "(255, 0, 163)",
+        "(255, 204, 0)",
+        "(255, 0, 143)",
+        "(0, 255, 235)",
+        "(133, 255, 0)",
+        "(255, 0, 235)",
+        "(245, 0, 255)",
+        "(255, 0, 122)",
+        "(255, 245, 0)",
+        "(10, 190, 212)",
+        "(214, 255, 0)",
+        "(0, 204, 255)",
+        "(20, 0, 255)",
+        "(255, 255, 0)",
+        "(0, 153, 255)",
+        "(0, 41, 255)",
+        "(0, 255, 204)",
+        "(41, 0, 255)",
+        "(41, 255, 0)",
+        "(173, 0, 255)",
+        "(0, 245, 255)",
+        "(71, 0, 255)",
+        "(122, 0, 255)",
+        "(0, 255, 184)",
+        "(0, 92, 255)",
+        "(184, 255, 0)",
+        "(0, 133, 255)",
+        "(255, 214, 0)",
+        "(25, 194, 194)",
+        "(102, 255, 0)",
+        "(92, 0, 255)"
+    ],
+    "name": [
+        "wall",
+        "building;edifice",
+        "sky",
+        "floor;flooring",
+        "tree",
+        "ceiling",
+        "road;route",
+        "bed",
+        "windowpane;window",
+        "grass",
+        "cabinet",
+        "sidewalk;pavement",
+        "person;individual;someone;somebody;mortal;soul",
+        "earth;ground",
+        "door;double;door",
+        "table",
+        "mountain;mount",
+        "plant;flora;plant;life",
+        "curtain;drape;drapery;mantle;pall",
+        "chair",
+        "car;auto;automobile;machine;motorcar",
+        "water",
+        "painting;picture",
+        "sofa;couch;lounge",
+        "shelf",
+        "house",
+        "sea",
+        "mirror",
+        "rug;carpet;carpeting",
+        "field",
+        "armchair",
+        "seat",
+        "fence;fencing",
+        "desk",
+        "rock;stone",
+        "wardrobe;closet;press",
+        "lamp",
+        "bathtub;bathing;tub;bath;tub",
+        "railing;rail",
+        "cushion",
+        "base;pedestal;stand",
+        "box",
+        "column;pillar",
+        "signboard;sign",
+        "chest;of;drawers;chest;bureau;dresser",
+        "counter",
+        "sand",
+        "sink",
+        "skyscraper",
+        "fireplace;hearth;open;fireplace",
+        "refrigerator;icebox",
+        "grandstand;covered;stand",
+        "path",
+        "stairs;steps",
+        "runway",
+        "case;display;case;showcase;vitrine",
+        "pool;table;billiard;table;snooker;table",
+        "pillow",
+        "screen;door;screen",
+        "stairway;staircase",
+        "river",
+        "bridge;span",
+        "bookcase",
+        "blind;screen",
+        "coffee;table;cocktail;table",
+        "toilet;can;commode;crapper;pot;potty;stool;throne",
+        "flower",
+        "book",
+        "hill",
+        "bench",
+        "countertop",
+        "stove;kitchen;stove;range;kitchen;range;cooking;stove",
+        "palm;palm;tree",
+        "kitchen;island",
+        "computer;computing;machine;computing;device;data;processor;electronic;computer;information;processing;system",
+        "swivel;chair",
+        "boat",
+        "bar",
+        "arcade;machine",
+        "hovel;hut;hutch;shack;shanty",
+        "bus;autobus;coach;charabanc;double-decker;jitney;motorbus;motorcoach;omnibus;passenger;vehicle",
+        "towel",
+        "light;light;source",
+        "truck;motortruck",
+        "tower",
+        "chandelier;pendant;pendent",
+        "awning;sunshade;sunblind",
+        "streetlight;street;lamp",
+        "booth;cubicle;stall;kiosk",
+        "television;television;receiver;television;set;tv;tv;set;idiot;box;boob;tube;telly;goggle;box",
+        "airplane;aeroplane;plane",
+        "dirt;track",
+        "apparel;wearing;apparel;dress;clothes",
+        "pole",
+        "land;ground;soil",
+        "bannister;banister;balustrade;balusters;handrail",
+        "escalator;moving;staircase;moving;stairway",
+        "ottoman;pouf;pouffe;puff;hassock",
+        "bottle",
+        "buffet;counter;sideboard",
+        "poster;posting;placard;notice;bill;card",
+        "stage",
+        "van",
+        "ship",
+        "fountain",
+        "conveyer;belt;conveyor;belt;conveyer;conveyor;transporter",
+        "canopy",
+        "washer;automatic;washer;washing;machine",
+        "plaything;toy",
+        "swimming;pool;swimming;bath;natatorium",
+        "stool",
+        "barrel;cask",
+        "basket;handbasket",
+        "waterfall;falls",
+        "tent;collapsible;shelter",
+        "bag",
+        "minibike;motorbike",
+        "cradle",
+        "oven",
+        "ball",
+        "food;solid;food",
+        "step;stair",
+        "tank;storage;tank",
+        "trade;name;brand;name;brand;marque",
+        "microwave;microwave;oven",
+        "pot;flowerpot",
+        "animal;animate;being;beast;brute;creature;fauna",
+        "bicycle;bike;wheel;cycle",
+        "lake",
+        "dishwasher;dish;washer;dishwashing;machine",
+        "screen;silver;screen;projection;screen",
+        "blanket;cover",
+        "sculpture",
+        "hood;exhaust;hood",
+        "sconce",
+        "vase",
+        "traffic;light;traffic;signal;stoplight",
+        "tray",
+        "ashcan;trash;can;garbage;can;wastebin;ash;bin;ash-bin;ashbin;dustbin;trash;barrel;trash;bin",
+        "fan",
+        "pier;wharf;wharfage;dock",
+        "crt;screen",
+        "plate",
+        "monitor;monitoring;device",
+        "bulletin;board;notice;board",
+        "shower",
+        "radiator",
+        "glass;drinking;glass",
+        "clock",
+        "flag"
+    ]
+}
+
+# ========
+# OPERATOR
+# ========
+class SD_render_op(Operator):
+    """
+    """
+    bl_label = "Render"
+    bl_idname = "b2sd.main"
+
+    def execute(self, context):
+        context = bpy.context
+        obj = context.object
+        scn = context.scene
+        b2sd= scn.b2sd
+        cn  = scn.custom
+
+        print("start b2sd")
+        butils = BUtils()
+        butils.doit(isanim              = b2sd.isRenAnim,
+                    sd_prompt           = b2sd.sd_prompt,
+                    sd_negative_prompt  = b2sd.sd_negative_prompt,
+                    sd_seed             = b2sd.sd_seed,
+                    sd_root_out_path    = b2sd.sd_out_path,
+                    sd_isRembg          = b2sd.sd_isRembg,
+                    sd_base_image       = b2sd.sd_base_image,
+                    sd_isImg2img        = b2sd.sd_isImg2img,
+                    sd_args             = b2sd.sd_args,
+                    sd_cn_list          = cn
+                    )
+
+        return {'FINISHED'}
+
+class CN_Utils_segmentator_op(Operator):
+    """
+    Make Sure to Select the Armature
+    """
+    bl_label = "segmenting"
+    bl_idname = "b2sd.segmenting"
+
+    def execute(self, context):
+        context = bpy.context
+        obj = context.object
+        scn = context.scene
+        b2sd= scn.b2sd
+
+        objs = bpy.context.selected_objects
+        print(b2sd.segmentColor)
+
+        for i in objs:
+            obj = i
+            mesh = obj.data
+
+            if not mesh.vertex_colors:
+                mesh.vertex_colors.new()
+
+            color_layer = mesh.vertex_colors["Col"]
+
+            i = 0
+            r, g, b = [float(x)/255 for x in b2sd.segmentColor.replace("(","").replace(")","").split(",")]
+            # print(r,g,b)
+            for poly in mesh.polygons:
+                for idx in poly.loop_indices:
+                    color_layer.data[i].color = (r, g, b, 1.0)
+                    i += 1
+
+            # set to vertex paint mode to see the result
+            # bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+        
+        return {'FINISHED'}
+
 # ==
 # UI
 # ==
-bl_info = {
-    "name": "Blender to Stable Diffusion",
-    "author": "anhungxadieu",
-    "version": (0, 0, 1),
-    "blender": (2, 80, 0),
-    "location": "View3D > N",
-    "description": "A tool for simplify a workflow from Blender to Stable Diffsion",
-    "warning": "",
-    "doc_url": "https://github.com/nguyenvuducthuy/thuy_b2sd/wiki",
-    "category": "anhungxadieu",
-}
-
-class CUSTOM_PG_b2sdSettings(PropertyGroup):
+class B2SD_PG_b2sdSettings(PropertyGroup):
     """
     ------------------------------------
     Store properties in the active scene
@@ -156,42 +689,24 @@ class CUSTOM_PG_b2sdSettings(PropertyGroup):
         maxlen=1024
         )
 
-class Button(bpy.types.Operator):
-    """
-    Make Sure to Select the Armature
-    """
-    bl_label = "Render"
-    bl_idname = "b2sd.main"
+    def getSegmentColor(self, context):
+        # dataFile = os.path.join(sys.path[0], "segmentator_data.json")
+        # data = None
+        # with open(dataFile) as json_file:
+        #     data = json.load(json_file)
+        data = _segData
+        res = ()
+        for i,j in zip(data["name"],data["color"]):
+            res += ((j, i, ""),)
+        return res
 
-    def execute(self, context):
-        context = bpy.context
-        obj = context.object
-        scn = context.scene
-        b2sd= scn.b2sd
-        cn  = scn.custom
+    segmentColor : EnumProperty(
+        name="segmentColor",
+        description="",
+        items=getSegmentColor
+        )
 
-        print("start b2sd")
-        butils = BUtils()
-        butils.doit(isanim              = b2sd.isRenAnim,
-                    sd_prompt           = b2sd.sd_prompt,
-                    sd_negative_prompt  = b2sd.sd_negative_prompt,
-                    sd_seed             = b2sd.sd_seed,
-                    sd_root_out_path    = b2sd.sd_out_path,
-                    sd_isRembg          = b2sd.sd_isRembg,
-                    sd_base_image       = b2sd.sd_base_image,
-                    sd_isImg2img        = b2sd.sd_isImg2img,
-                    sd_args             = b2sd.sd_args,
-                    sd_cn_list          = cn
-                    )
-
-        return {'FINISHED'}
-
-def traverse_tree(t):
-    yield t
-    for child in t.children:
-        yield from traverse_tree(child)
-
-class CUSTOM_OT_actions(Operator):
+class B2SD_OT_actions(Operator):
     """Move items up and down, add and remove"""
     bl_idname = "custom.list_action"
     bl_label = "List Actions"
@@ -210,9 +725,14 @@ class CUSTOM_OT_actions(Operator):
         from random import random
         return Color((random(), random(), random()))
 
+    def traverse_tree(self,t):
+        yield t
+        for child in t.children:
+            yield from self.traverse_tree(child)
+
     def createCole(self, scn, name = "none"):
         coll = scn.collection
-        for c in traverse_tree(coll):
+        for c in self.traverse_tree(coll):
             if c.name == name:
                 # c.hide_render = not c.hide_render
                 return c
@@ -270,7 +790,7 @@ def printItem(self, value):
     scn = context.scene
     print(scn.custom[scn.custom_index])
 
-class CUSTOM_UL_items(UIList):
+class B2SD_UL_items(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             split = layout.split(factor=0.3)
@@ -288,7 +808,7 @@ class CUSTOM_UL_items(UIList):
     def invoke(self, context, event):
         pass
 
-class B2SD_PT_main_pannel(bpy.types.Panel):
+class B2SD_PT_main_pannel(Panel):
     bl_label        = "b2sd"
     bl_idname       = "B2SD_PT_main_pannel"
     bl_space_type   = 'VIEW_3D'
@@ -304,7 +824,7 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
 
         row = layout.row()
 
-        row.operator(Button.bl_idname,text=Button.bl_label, icon='MENU_PANEL')
+        row.operator(SD_render_op.bl_idname,text=SD_render_op.bl_label, icon='MENU_PANEL')
 
         # display the properties
         layout.prop(b2sd, "isRenAnim",          text="isRenAnim")
@@ -320,14 +840,14 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
 
         rows    = 2
         row     = layout.row()
-        row.template_list("CUSTOM_UL_items", "custom_def_list", scn, "custom", scn, "custom_index", rows=rows)
+        row.template_list("B2SD_UL_items", "custom_def_list", scn, "custom", scn, "custom_index", rows=rows)
 
         col     = row.column(align=True)
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='ADD',       text="").action = 'ADD'
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='REMOVE',    text="").action = 'REMOVE'
+        col.operator(B2SD_OT_actions.bl_idname, icon='ADD',       text="").action = 'ADD'
+        col.operator(B2SD_OT_actions.bl_idname, icon='REMOVE',    text="").action = 'REMOVE'
         col.separator()
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_UP',   text="").action = 'UP'
-        col.operator(CUSTOM_OT_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
+        col.operator(B2SD_OT_actions.bl_idname, icon='TRIA_UP',   text="").action = 'UP'
+        col.operator(B2SD_OT_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
 
         idx     = scn.custom_index
         try:
@@ -346,7 +866,28 @@ class B2SD_PT_main_pannel(bpy.types.Panel):
         except IndexError:
             pass
 
-class CUSTOM_PG_ControlNetCollection(PropertyGroup):
+class B2SD_PT_CNSegmentator(Panel):
+    bl_label = "Utils_segmentator"
+    bl_category = "anhungxadieu"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_options = {"DEFAULT_CLOSED"}
+    # bl_parent_id = "B2SD_PT_main_pannel"
+
+    def draw(self, context):
+        layout = self.layout
+
+        obj = context.object
+        scn = context.scene
+        b2sd= scn.b2sd
+
+        row = layout.row()
+
+        # row.prop_search(b2sd, "segmentColor", b2sd, "segmentColor")
+        row.prop(b2sd, "segmentColor")
+        row.operator(CN_Utils_segmentator_op.bl_idname,text=CN_Utils_segmentator_op.bl_label, icon='MENU_PANEL')
+
+class B2SD_PG_ControlNetCollection(PropertyGroup):
     """
     "input_image": cn_img,
     "module": "none",
@@ -450,13 +991,18 @@ class CUSTOM_PG_ControlNetCollection(PropertyGroup):
         default = False
         )
 
+# ========
+# REGISTER
+# ========
 _classes=[
-Button,
+SD_render_op,
+CN_Utils_segmentator_op,
 B2SD_PT_main_pannel,
-CUSTOM_PG_b2sdSettings,
-CUSTOM_OT_actions,
-CUSTOM_UL_items,
-CUSTOM_PG_ControlNetCollection
+B2SD_PT_CNSegmentator,
+B2SD_PG_b2sdSettings,
+B2SD_OT_actions,
+B2SD_UL_items,
+B2SD_PG_ControlNetCollection
 ]
 
 def register():
@@ -464,8 +1010,8 @@ def register():
     for cls in _classes:
         register_class(cls)
 
-    bpy.types.Scene.b2sd = PointerProperty(type=CUSTOM_PG_b2sdSettings)
-    bpy.types.Scene.custom = CollectionProperty(type=CUSTOM_PG_ControlNetCollection)
+    bpy.types.Scene.b2sd = PointerProperty(type=B2SD_PG_b2sdSettings)
+    bpy.types.Scene.custom = CollectionProperty(type=B2SD_PG_ControlNetCollection)
     bpy.types.Scene.custom_index = IntProperty()
 
 def unregister():
