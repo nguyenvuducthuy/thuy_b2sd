@@ -1179,7 +1179,7 @@ def run_sd(fimg, kwargs):
             return
         # _sd_base_img = Image.open(_sd_base_img_path)
         # _sd_base_img = _sd_base_img.resize((512,512))
-        _sd_base_img = encode_b64(_sd_base_img)
+        _sd_base_img = encode_b64(_sd_base_img_path)
         sd_cmd = "img2img"
 
     url = f"http://localhost:7860/sdapi/v1/{sd_cmd}"
